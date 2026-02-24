@@ -307,6 +307,7 @@ def _go_sdk_impl(ctx):
                 multi_version = multi_version_module[module.name],
                 tag_type = "download",
                 index = index,
+                sdk_version = download_tag.version,
             )
 
             _download_sdk(
@@ -346,6 +347,7 @@ def _go_sdk_impl(ctx):
                         tag_type = "download",
                         index = index,
                         suffix = "_{}_{}".format(goos, goarch),
+                        sdk_version = download_tag.version,
                     )
 
                     _download_sdk(
@@ -426,15 +428,20 @@ def _go_sdk_impl(ctx):
     else:
         return None
 
-def _default_go_sdk_name(*, module, multi_version, tag_type, index, suffix = ""):
+def _default_go_sdk_name(*, module, multi_version, tag_type, index, suffix = "", sdk_version = ""):
     # Keep the version and name of the root module out of the repository name if possible to
     # prevent unnecessary rebuilds when it changes.
-    return "{name}_{version}_{tag_type}_{index}{suffix}".format(
+    # Include the SDK version in the name to ensure that when the Go version changes (e.g. via
+    # from_file reading a different go.mod), the SDK repo name changes too. This forces dependent
+    # repos (such as Gazelle's go_repository_tools) to be re-fetched with the correct SDK path,
+    # avoiding "No such file or directory" errors for the Go binary.
+    return "{name}_{version}_{tag_type}_{index}{sdk_version}{suffix}".format(
         # "main_" is not a valid module name and thus can't collide.
         name = "main_" if module.is_root else module.name,
         version = module.version if multi_version else "",
         tag_type = tag_type,
         index = index,
+        sdk_version = "_" + sdk_version.replace(".", "_") if sdk_version else "",
         suffix = suffix,
     )
 
@@ -470,6 +477,9 @@ def _download_sdk(*, get_sdks_by_version, name, goos, goarch, download_tag):
         version = download_tag.version,
         strip_prefix = download_tag.strip_prefix,
     )
+
+# Exported for testing.
+default_go_sdk_name = _default_go_sdk_name
 
 go_sdk_extra_kwargs = {
     # The choice of a host-compatible SDK is expressed in repository rule attribute values and
